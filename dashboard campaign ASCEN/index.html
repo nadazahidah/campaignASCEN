@@ -1,0 +1,414 @@
+import pandas as pd
+import json
+import os
+
+excel_file_path = "Nadaa's Campaign ASCEN Field.xlsx"
+
+if not os.path.exists(excel_file_path):
+    print(f"File '{excel_file_path}' tidak ditemukan di direktori ini.")
+else:
+    excel_file = pd.ExcelFile(excel_file_path)
+
+    def clean_and_serialize(df):
+        df_clean = df.fillna('')
+        records = df_clean.to_dict(orient='records')
+        cleaned = [r for r in records if any(str(v).strip() != '' for v in r.values())]
+        
+        def format_item(item):
+            if isinstance(item, dict):
+                return {k: format_item(v) for k, v in item.items()}
+            elif isinstance(item, list):
+                return [format_item(i) for i in item]
+            elif hasattr(item, 'isoformat'):
+                return item.isoformat()
+            elif pd.isna(item):
+                return ""
+            return item
+
+        return format_item(cleaned)
+
+    sheet_names = excel_file.sheet_names
+    
+    db_clean = clean_and_serialize(pd.read_excel(excel_file, 'DATABASE')) if 'DATABASE' in sheet_names else []
+    locking_clean = clean_and_serialize(pd.read_excel(excel_file, 'LOCKING')) if 'LOCKING' in sheet_names else []
+    payment_clean = clean_and_serialize(pd.read_excel(excel_file, 'payment tracking')) if 'payment tracking' in sheet_names else []
+    brief_clean = clean_and_serialize(pd.read_excel(excel_file, 'BRIEF')) if 'BRIEF' in sheet_names else []
+
+    json_db = json.dumps(db_clean)
+    json_locking = json.dumps(locking_clean)
+    json_payment = json.dumps(payment_clean)
+    json_brief = json.dumps(brief_clean)
+
+    # HTML CONTENT MURNI (HANYA DARI <!DOCTYPE html> SAMPAI </html>)
+    html_content = f"""<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nadaa's Campaign & Operations Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .active-tab {{ border-bottom: 3px solid #6366f1; color: #4f46e5; font-weight: 600; }}
+        .badge-outreach {{ background-color: #e0e7ff; color: #3730a3; }}
+        .badge-locking {{ background-color: #fef3c7; color: #92400e; }}
+        .badge-brief {{ background-color: #e0f2fe; color: #075985; }}
+        .badge-live {{ background-color: #dcfce7; color: #166534; }}
+        .badge-paid {{ background-color: #f3e8ff; color: #6b21a8; }}
+        .badge-overdue {{ background-color: #fee2e2; color: #991b1b; }}
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
+
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-16">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-xl shadow-md">
+                    N
+                </div>
+                <div>
+                    <h1 class="font-bold text-slate-900 text-lg leading-tight">Nadaa's Campaign Operations Hub</h1>
+                    <p class="text-xs text-slate-500">ASCEN Management • Integrated Master Dashboard</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <button onclick="exportCSV()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm transition">
+                    <i class="fa-solid fa-file-excel"></i> Export CSV
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+        <div class="flex border-b border-slate-200 mb-6 bg-white rounded-t-xl px-4 pt-2 shadow-sm overflow-x-auto">
+            <button onclick="switchTab('standup')" id="tab-standup" class="active-tab py-3 px-5 text-sm flex items-center gap-2 whitespace-nowrap">
+                <i class="fa-solid fa-sun text-amber-500"></i> Morning Meeting Standup
+            </button>
+            <button onclick="switchTab('master')" id="tab-master" class="py-3 px-5 text-sm text-slate-600 flex items-center gap-2 whitespace-nowrap">
+                <i class="fa-solid fa-table"></i> Master Funnel (Database)
+            </button>
+            <button onclick="switchTab('locking')" id="tab-locking" class="py-3 px-5 text-sm text-slate-600 flex items-center gap-2 whitespace-nowrap">
+                <i class="fa-solid fa-file-contract"></i> Locking & SPK
+            </button>
+            <button onclick="switchTab('brief')" id="tab-brief" class="py-3 px-5 text-sm text-slate-600 flex items-center gap-2 whitespace-nowrap">
+                <i class="fa-solid fa-pen-to-square"></i> Briefs & Content
+            </button>
+            <button onclick="switchTab('payment')" id="tab-payment" class="py-3 px-5 text-sm text-slate-600 flex items-center gap-2 whitespace-nowrap">
+                <i class="fa-solid fa-file-invoice-dollar"></i> Payment Tracking
+            </button>
+            <button onclick="switchTab('generator')" id="tab-generator" class="py-3 px-5 text-sm text-slate-600 flex items-center gap-2 whitespace-nowrap">
+                <i class="fa-brands fa-whatsapp text-emerald-500"></i> Auto WA Generator
+            </button>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-wrap gap-4 justify-between items-center">
+            <div class="flex flex-1 min-w-[280px] items-center gap-2 bg-slate-100 px-3 py-2 rounded-lg border border-slate-200">
+                <i class="fa-solid fa-magnifying-glass text-slate-400"></i>
+                <input type="text" id="searchInput" oninput="renderCurrentView()" placeholder="Cari nama KOL, Username, Brand, atau Produk..." class="bg-transparent text-sm w-full outline-none">
+            </div>
+            
+            <div class="flex items-center gap-3 flex-wrap">
+                <select id="filterBrand" onchange="renderCurrentView()" class="bg-slate-100 text-slate-700 text-xs rounded-lg px-3 py-2 border border-slate-200 outline-none">
+                    <option value="">Semua Brand</option>
+                    <option value="Derma Angel">Derma Angel</option>
+                    <option value="NPURE">NPURE</option>
+                    <option value="Buttered">Buttered</option>
+                    <option value="BLIV">BLIV</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="view-standup" class="space-y-6">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="font-bold text-slate-900 text-sm mb-2">Morning Standup Overview</h3>
+                <p class="text-xs text-slate-500">Dashboard operasional kampanye aktif.</p>
+            </div>
+        </div>
+
+        <div id="view-master" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-slate-100 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200">
+                        <tr>
+                            <th class="p-3">Brand & Produk</th>
+                            <th class="p-3">Username KOL</th>
+                            <th class="p-3">SOW</th>
+                            <th class="p-3">PIC</th>
+                            <th class="p-3">Kontak / WA</th>
+                            <th class="p-3 text-center">Status</th>
+                            <th class="p-3 text-center">Aksi WA</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-master-body" class="divide-y divide-slate-200"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="view-locking" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-slate-100 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200">
+                        <tr>
+                            <th class="p-3">Brand & Produk</th>
+                            <th class="p-3">Username</th>
+                            <th class="p-3">No. SPK</th>
+                            <th class="p-3">Rate</th>
+                            <th class="p-3">TOP</th>
+                            <th class="p-3">Target Post</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-locking-body" class="divide-y divide-slate-200"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="view-brief" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-slate-100 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200">
+                        <tr>
+                            <th class="p-3">Brand & Produk</th>
+                            <th class="p-3">Username</th>
+                            <th class="p-3">Target Post</th>
+                            <th class="p-3">Brief & Requirements</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-brief-body" class="divide-y divide-slate-200"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="view-payment" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-slate-100 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200">
+                        <tr>
+                            <th class="p-3">KOL / Nama</th>
+                            <th class="p-3">Campaign</th>
+                            <th class="p-3">TOP</th>
+                            <th class="p-3">Form Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-payment-body" class="divide-y divide-slate-200"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="view-generator" class="hidden bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+            <h3 class="font-bold text-slate-900 text-base mb-4 flex items-center gap-2">
+                <i class="fa-brands fa-whatsapp text-emerald-500 text-xl"></i> Dynamic WhatsApp Message Generator
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Pilih Jenis Pesan</label>
+                        <select id="genMsgType" onchange="generateCustomChat()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none">
+                            <option value="outreach">1. Outreach Make Sure Campaign</option>
+                            <option value="locking">2. Locking SOW & Link Form SPK</option>
+                            <option value="brief">3. Pengiriman Brief & Deadline Storyline</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Pilih KOL</label>
+                        <select id="genKolSelect" onchange="generateCustomChat()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none"></select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Nomor WhatsApp Target</label>
+                        <input type="text" id="genPhone" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none">
+                    </div>
+                </div>
+
+                <div class="flex flex-col">
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Preview Message</label>
+                    <textarea id="genPreview" rows="8" class="w-full bg-slate-900 text-emerald-400 font-mono text-xs p-3 rounded-lg border border-slate-800 outline-none flex-1"></textarea>
+                    <div class="flex gap-3 mt-4">
+                        <button onclick="copyGeneratedChat()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-copy"></i> Copy Text
+                        </button>
+                        <button onclick="sendGeneratedWA()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2 shadow-sm">
+                            <i class="fa-brands fa-whatsapp"></i> Send via WA
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const RAW_DATABASE = {json_db};
+        const RAW_LOCKING = {json_locking};
+        const RAW_PAYMENT = {json_payment};
+        const RAW_BRIEF = {json_brief};
+
+        let currentView = 'standup';
+
+        function switchTab(viewName) {{
+            currentView = viewName;
+            ['standup', 'master', 'locking', 'brief', 'payment', 'generator'].forEach(t => {{
+                document.getElementById('view-' + t).classList.add('hidden');
+                document.getElementById('tab-' + t).classList.remove('active-tab');
+                document.getElementById('tab-' + t).classList.add('text-slate-600');
+            }});
+
+            document.getElementById('view-' + viewName).classList.remove('hidden');
+            document.getElementById('tab-' + viewName).classList.add('active-tab');
+            document.getElementById('tab-' + viewName).classList.remove('text-slate-600');
+
+            renderCurrentView();
+        }}
+
+        function renderCurrentView() {{
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const filterBrand = document.getElementById('filterBrand').value;
+
+            if (currentView === 'master') renderMaster(search, filterBrand);
+            if (currentView === 'locking') renderLocking(search, filterBrand);
+            if (currentView === 'brief') renderBrief(search);
+            if (currentView === 'payment') renderPayment(search);
+            if (currentView === 'generator') initGenerator();
+        }}
+
+        function renderMaster(search, filterBrand) {{
+            const tbody = document.getElementById('table-master-body');
+            tbody.innerHTML = '';
+
+            const filtered = RAW_DATABASE.filter(r => {{
+                const matchSearch = (r.Username || '').toLowerCase().includes(search) || 
+                                    (r.Produk || '').toLowerCase().includes(search);
+                const matchBrand = filterBrand ? (r[' '] || '').includes(filterBrand) : true;
+                return matchSearch && matchBrand;
+            }});
+
+            filtered.slice(0, 50).forEach(r => {{
+                const brand = r[' '] || 'Brand';
+                const cp = (r.CP || '').toString().replace(/[^0-9]/g, '');
+                const waUrl = `https://wa.me/${{cp}}`;
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50">
+                        <td class="p-3 font-medium text-slate-900">${{brand}} - ${{r.Produk || '-'}}</td>
+                        <td class="p-3 font-semibold text-indigo-600">@${{r.Username || '-'}}</td>
+                        <td class="p-3 text-slate-600">${{r.SOW || '-'}}</td>
+                        <td class="p-3 text-slate-500">${{r.PIC_LISTING || '-'}}</td>
+                        <td class="p-3 text-slate-600">${{r.CP || '-'}}</td>
+                        <td class="p-3 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold badge-outreach">Outreach</span></td>
+                        <td class="p-3 text-center">
+                            <a href="${{waUrl}}" target="_blank" class="bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] px-2.5 py-1 rounded font-semibold inline-flex items-center gap-1 shadow-sm">
+                                <i class="fa-brands fa-whatsapp"></i> Chat WA
+                            </a>
+                        </td>
+                    </tr>
+                `;
+            }});
+        }}
+
+        function renderLocking(search, filterBrand) {{
+            const tbody = document.getElementById('table-locking-body');
+            tbody.innerHTML = '';
+            RAW_LOCKING.slice(0, 50).forEach(r => {{
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50">
+                        <td class="p-3 font-medium text-slate-900">${{r.Brand || '-'}}</td>
+                        <td class="p-3 font-semibold text-indigo-600">@${{r.Username || '-'}}</td>
+                        <td class="p-3 font-mono text-slate-600">${{r['NOMOR SPK'] || '-'}}</td>
+                        <td class="p-3 font-semibold text-emerald-700">Rp ${{r.RATE || '-'}}</td>
+                        <td class="p-3 text-slate-600">${{r.TOP || '-'}}</td>
+                        <td class="p-3 text-slate-500">${{r.Bulan || '-'}}</td>
+                    </tr>
+                `;
+            }});
+        }}
+
+        function renderBrief(search) {{
+            const tbody = document.getElementById('table-brief-body');
+            tbody.innerHTML = '';
+            RAW_BRIEF.slice(0, 50).forEach(r => {{
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50">
+                        <td class="p-3 font-medium text-slate-900">${{r.Brand || '-'}} - ${{r.Produk || '-'}}</td>
+                        <td class="p-3 font-semibold text-indigo-600">@${{r.Username || '-'}}</td>
+                        <td class="p-3 text-slate-600">${{r.Bulan || '-'}}</td>
+                        <td class="p-3 text-slate-500 max-w-xs truncate">${{r.BRIEF || '-'}}</td>
+                    </tr>
+                `;
+            }});
+        }}
+
+        function renderPayment(search) {{
+            const tbody = document.getElementById('table-payment-body');
+            tbody.innerHTML = '';
+            RAW_PAYMENT.slice(0, 50).forEach(r => {{
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50">
+                        <td class="p-3 font-semibold text-indigo-600">@${{r.nama || '-'}}</td>
+                        <td class="p-3 font-medium text-slate-900">${{r.Campaign || '-'}}</td>
+                        <td class="p-3 text-slate-600">${{r.TOP || '-'}}</td>
+                        <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold badge-locking">${{r.FORM || 'Pending'}}</span></td>
+                    </tr>
+                `;
+            }});
+        }}
+
+        function initGenerator() {{
+            const select = document.getElementById('genKolSelect');
+            if (select.children.length > 0) return;
+            RAW_DATABASE.slice(0, 100).forEach(r => {{
+                if (r.Username) {{
+                    select.innerHTML += `<option value="${{r.Username}}">@${{r.Username}}</option>`;
+                }}
+            }});
+            generateCustomChat();
+        }}
+
+        function generateCustomChat() {{
+            const type = document.getElementById('genMsgType').value;
+            const kolUser = document.getElementById('genKolSelect').value;
+            const kolData = RAW_DATABASE.find(r => r.Username === kolUser) || {};
+            
+            document.getElementById('genPhone').value = (kolData.CP || '').toString().replace(/[^0-9]/g, '');
+
+            let msg = `Hai Kak @${{kolData.Username || ''}},\n\n`;
+            if (type === 'outreach') {{
+                msg += `Perkenalkan aku Nadaa dari Ascen Management. Aku mau update info campaign ${{kolData[' '] || 'Brand'}}.`;
+            }} else {{
+                msg += `Berikut detail info campaign untuk produk ${{kolData.Produk || ''}}.`;
+            }}
+            document.getElementById('genPreview').value = msg;
+        }}
+
+        function sendGeneratedWA() {{
+            const phone = document.getElementById('genPhone').value;
+            const msg = document.getElementById('genPreview').value;
+            window.open(`https://wa.me/${{phone}}?text=${{encodeURIComponent(msg)}}`, '_blank');
+        }}
+
+        function copyGeneratedChat() {{
+            const text = document.getElementById('genPreview').value;
+            navigator.clipboard.writeText(text);
+            alert('Teks berhasil di-copy!');
+        }}
+
+        function exportCSV() {{
+            let csv = "Brand,Produk,Username,SOW,PIC,Kontak\\n";
+            RAW_DATABASE.forEach(r => {{
+                csv += `"${{r[' '] || ''}}","${{r.Produk || ''}}","${{r.Username || ''}}","${{r.SOW || ''}}","${{r.PIC_LISTING || ''}}","${{r.CP || ''}}"\\n`;
+            }});
+            const blob = new Blob([csv], {{ type: 'text/csv' }});
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', 'Nadaa_Campaign_Master_Database.csv');
+            a.click();
+        }}
+
+        renderCurrentView();
+    </script>
+</body>
+</html>"""
+
+    # 3. PENULISAN KE FILE INDEX.HTML DILAKUKAN DILUAR F-STRING
+    with open('index.html', 'w', encoding='utf-8') as f:
+        f.write(html_content)
+
+    print("Berhasil memperbarui index.html tanpa teks kode Python!")
